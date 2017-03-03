@@ -973,3 +973,42 @@ class UrlReader(FileFormat):
         matches = re.findall(r"filename\*?=(?:\"|.{0,10}?'[^']*')([^\"]+)",
                              content_disposition or '')
         return urlunquote(matches[-1]) if matches else default_name
+
+
+class FastaReader(FileFormat):
+    """Reader for fasta (sequence) files"""
+    EXTENSIONS = ('.fasta', '.fa')
+    DESCRIPTION = 'Fasta file'
+
+    @staticmethod
+    def _parse(filename):
+        delim = ">" # Special character
+        fp = FileFormat.open(filename, "r")
+        data = list()
+
+        line = fp.readline()
+        if not line or not line.startswith(delim):
+            raise IOError("Incorrectly formatted .fasta file")
+        while line:
+            rec_id = line.replace(">", "").strip()
+            rec_data = ""
+            rec_line = fp.readline()    # At least one line must follow
+            if not rec_line:
+                raise IOError("Incorrectly formatted .fasta file")
+            while rec_line and not rec_line.startswith(delim):
+                rec_data += rec_line.strip()
+                rec_line = fp.readline()
+            line = rec_line
+            data.append((len(rec_data), rec_id, rec_data))
+        return data
+
+    def read(self):
+        data = FastaReader._parse(self.filename)
+        domain = Domain([
+            ContinuousVariable(name="length")
+        ], metas=[
+            StringVariable(name="id"),
+            StringVariable(name="sequence")
+        ])
+        table = Table.from_list(domain, rows=data)
+        return table
